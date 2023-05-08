@@ -1,0 +1,276 @@
+#!/bin/bash
+# Configure RHEL 7.x for use with Slack, includes options to install Chrome and additional DE 
+#
+# I always unsubscribe when using a VM just in case the VM becomes corrupt
+# So make the default to not stay registered with Red Hat
+REGISTER=no
+
+# When help is needed it will always be given at Slack
+function help
+{
+	echo " "
+	echo $0 " - Configure RHEL for use with Slack"
+	echo " 	- Needs to be executed as root"
+	echo " 	- Needs at least one arguement"
+	echo " "
+	echo " Options:"
+	echo " 	-h, --help 	show help"
+	echo "	-c, --chrome 	Install Chrome - current stable version"
+	echo "	-s, --slack 	install the latest production desktop app"
+	echo "	-e=env1,env2 	Install requested DE, where env is {mate,kde,gnome,xfce}"
+	echo "	-re=env1,env2 	Remove requested DE, where env is {mate,kde,gnome,xfce}"
+	echo "	-z, --timezone	get help with setting timezone and exit"
+	echo "	-d, --date	get help with setting date and exit"
+	echo "	-r, --register	stay registered when complete"
+	echo "	-u, --upgrade	upgrade to the latest version"
+	echo "	-v, --vbox	install virtual box"
+	exit 1
+}
+if [[ $# -eq 0 ]]; then 
+help 
+fi
+
+#this check put in because in case used on new system and permissions not setup properly
+if [[ `whoami` != "root" ]]; then
+echo $0 "ERROR:  needs to be executed as root. Exiting."
+help
+fi
+
+ID_LIKE=`grep ID_LIKE /etc/os-release | cut -d"=" -f2`
+IDX=`grep -w ID= /etc/os-release | cut -d"=" -f2`
+if [[ $ID_LIKE = '"fedora"' ]]; then
+	MGR=yum
+	PACKAGE=rpm
+	if [[ $IDX = '"rhel"' ]]; then
+		RH=yes
+	fi
+elif [[ $ID_LIKE = "debian" ]]; then
+	MGR=apt
+	PACKAGE=deb
+else 
+	ID_LIKE=$IDX
+	#need to improve this for fedora and debian
+	echo "ERROR : Undefined package type $ID_LIKE - Exiting" 
+	exit
+fi
+
+# parse input
+for i in "$@"
+do
+case $i in
+	-h | --help):
+	help
+	shift
+	;;
+	-c | --chrome)
+	echo "Chrome will be installed"
+	CHROME=yes
+	shift
+	;;
+	-e=* | --env=*)
+	DE=`echo ${i#*=} | sed 's/\,/ /g'`
+	echo "Install Desktop Environment: " $DE
+	shift
+	;;
+	-re=* | --renv=*)
+	RDE=`echo ${i#*=} | sed 's/\,/ /g'`
+	echo "Remove Desktop Environment: " $RDE
+	shift
+	;;
+	-s | --slack)
+	SLACK=yes
+	echo "Production version of Slack Linux Desktop will be installed"
+	shift
+	;;
+	-r | --register)
+	REGISTER=yes
+	shift
+	;;
+	-u | --upgrade)
+	UPGRADE=yes
+	shift
+	;;
+	-v | --vbox)
+	VIRTUAL=yes
+	echo "VirtualBox will be installed."
+	shift
+	;;
+	-z | --timezone)
+	echo "Set your timezone by searching for your timezone: timedatectl list-timezones"
+	echo "Set your timezone : timedatectl set-timezone America/Los_Angeles"
+	exit
+	;;
+	-d | --date)
+	date
+	echo "if the date or time are incorrect, set it with: date MMDDhhmmYYYY"
+	exit
+	;;
+	*)
+	echo "info: unknown option - skipping" $i
+	shift
+	;;
+esac
+done
+	
+if [[ $RH = "yes" ]]; then
+    SUBSCRIBED=`subscription-manager list | grep Subscribed`
+    if [[ $SUBSCRIBED = "" ]]; then
+	subscription-manager register --username=$RHUSER --password=$RHPW
+	subscription-manager attach --auto
+	subscription-manager repos --enable=rhel-8-for-x86_64-appstream-rpms
+    fi
+fi
+
+if [[ $UPGRADE = "yes" ]]; then
+	$MGR update -y
+	$MGR -y upgrade
+fi
+
+if [[ $CHROME = "yes" ]]; then
+	wget https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.$PACKAGE
+	$MGR -y install ./google-chrome-stable_current_*.$PACKAGE
+	rm ./google-chrome-stable_current_*.$PACKAGE
+fi
+
+if [[ $VIRTUAL = "yes" ]]; then
+	if [ $PACKAGE = "rpm" ]; then
+		echo "[virtualbox]" > /etc/yum.repos.d/virtualbox.repo
+		echo "name=Oracle Linux / RHEL / CentOS-$releasever / $basearch - VirtualBox" >> /etc/yum.repos.d/virtualbox.repo
+		#echo "baseurl=http://download.virtualbox.org/virtualbox/rpm/el/$releasever/$basearch" >> /etc/yum.repos.d/virtualbox.repo
+		echo "baseurl=http://download.virtualbox.org/virtualbox/rpm/el/7.3/x86_64" >> /etc/yum.repos.d/virtualbox.repo
+		echo "enabled=1" >> /etc/yum.repos.d/virtualbox.repo
+		echo "gpgcheck=1" >> /etc/yum.repos.d/virtualbox.repo
+		echo "repo_gpgcheck=1" >> /etc/yum.repos.d/virtualbox.repo
+		echo "gpgkey=https://www.virtualbox.org/download/oracle_vbox.asc" >> /etc/yum.repos.d/virtualbox.repo
+		yum -y install kernel-devel-3.10.0-693.el7.x86_64
+		yum -y install dkms kernel-devel kernel-headers
+		yum -y install VirtualBox-5.1
+		/sbin/vboxconfig
+	else
+	echo WIP
+	# need to include debian based info here
+		wget -q https://www.virtualbox.org/download/oracle_vbox_2016.asc -O- | sudo apt-key add -
+		wget -q https://www.virtualbox.org/download/oracle_vbox.asc -O- | sudo apt-key add -
+		echo "deb https://download.virtualbox.org/virtualbox/debian xenial contrib" > /etc/apt/sources.list.d/virtualbox.list
+		apt update
+		apt install virtualbox virtualbox-ext-pack
+	fi
+fi
+
+if [[ $SSR = "yes" ]]; then
+	# WIP 
+	echo "[atrpms]" > /etc/yum.repos.d/atrpm.repo
+	echo "name=Fedora Core $releasever - $basearch - ATrpms" >> /etc/yum.repos.d/atrpm.repo
+#	echo "baseurl=http://dl.atrpms.net/el$releasever-$basearch/atrpms/stable" >> /etc/yum.repos.d/atrpm.repo
+	echo "gpgkey=http://ATrpms.net/RPM-GPG-KEY.atrpms" >> /etc/yum.repos.d/atrpm.repo
+	echo "gpgcheck=1" >> /etc/yum.repos.d/atrpm.repo
+	yum install ffmpeg ffmpeg-devel libX11-devel libXfixes-devel jack-audio-connection-kit-devel mesa-libGL-devel git
+	git clone https://github.com/MaartenBaert/ssr
+	cd ssr
+	./simple-build-and-install
+fi
+
+# Parse RDE and remove the requested desktop
+for j in $RDE
+do
+case $j in
+	mate | MATE | Mate)
+	echo "Remove MATE desktop"
+	$MGR -y groupremove mate-desktop-environment
+	shift
+	;;
+	gnome | GNOME | Gnome)
+	echo "Remove GNOME Desktop"
+	$MGR -y remove gnome-desktop
+	shift
+	;;
+	kde | KDE | Kde)
+	echo "Remove KDE"
+	$MGR -y groupremove kde-desktop
+	shift
+	;;
+	plasma | PLASMA | Plasma)
+	echo "Remove Plasma Workspaces"
+	$MGR -y groupremove "KDE Plasma Workspaces"
+	shift
+	;;
+	xfce | XFCE | Xfce)
+	echo "Remove Xfce"
+	$MGR -y groupremove xfce-desktop
+	shift
+	;;
+	*)
+	echo "info: Unknown desktop environment - skipping" $j
+	shift
+	;;
+esac
+done
+
+# Parse DE and install the requested desktop
+for j in $DE
+do
+case $j in
+	mate | MATE | Mate)
+	echo "Install MATE desktop"
+	$MGR -y groupinstall mate-desktop-environment
+	shift
+	;;
+	gnome | GNOME | Gnome)
+	echo "Install GNOME Desktop"
+	# if gnome-shell --version returns a version then do nothing
+	$MGR -y groupinstall "GNOME Desktop"
+	shift
+	;;
+	kde | KDE | Kde)
+	echo "Install KDE"
+	$MGR -y groupinstall kde-desktop
+	shift
+	;;
+	plasma | PLASMA | Plasma)
+	echo "Install Plasma Workspaces"
+	$MGR -y groupinstall "KDE Plasma Workspaces"
+	shift
+	;;
+	xfce | XFCE | Xfce)
+	echo "Install Xfce"
+	$MGR -y groupinstall xfce-desktop
+	shift
+	;;
+	*)
+	echo "info: Unknown desktop environment - skipping" $j
+	shift
+	;;
+esac
+done
+
+if [[ $SLACK = "yes" ]]; then 
+	if [[ $PACKAGE = "rpm" ]]; then
+		repo=/etc/yum.repos.d/slack.repo
+		echo "[slack]" > $repo
+		echo "name=slack" >> $repo
+		echo "baseurl=https://packagecloud.io/slacktechnologies/slack/fedora/21/x86_64" >> $repo
+		echo "enabled=1" >> $repo
+		echo "gpgcheck=0" >> $repo
+		echo "gpgkey=https://packagecloud.io/gpg.key" >> $repo
+		echo "sslverify=1" >> $repo
+		echo "sslcacert=/etc/pki/tls/certs/ca-bundle.crt" >> $repo
+		yum -y install slack
+	elif [[ $PACKAGE = "deb" ]]; then
+		repo=/etc/apt/sources.list.d/slack.list
+		echo "deb https://packagecloud.io/slacktechnologies/slack/debian/ jessie main" > $repo
+		apt -y update
+		apt install slack-desktop
+	fi
+fi
+
+if [[ $JAVA = "yes" ]]; then
+	$MGR install java-1.7.0-openjdk-devel
+	export JAVA_HOME=`which java`
+fi
+
+
+if [[ $RH = "yes" ]] && [[ $REGISTER = "no" ]];  then
+	subscription-manager remove --all
+	subscription-manager unregister
+fi
+
