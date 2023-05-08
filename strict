@@ -1,0 +1,38 @@
+#!/bin/bash
+# Install local strict snap build with all the connections 
+
+# When help is needed it will always be given at Slack
+function help
+{
+	echo " "
+	echo $0 " - Install local strict snap build"
+	echo " - Needs one argument - the local Snap package path/filename"
+	exit 1
+}
+if [[ $# -eq 0 ]]; then
+help
+fi
+
+if [[ ! -f $1 ]]; then
+echo "$1 not found"
+help
+fi
+
+if [[ $1 == slack*.snap ]]; then
+sudo snap install --dangerous $1 
+
+sudo snap connect slack:dot-config-slack
+sudo snap connect slack:dot-config-slack-autostart
+sudo snap connect slack:password-manager-service
+sudo snap connect slack:camera
+sudo snap connect slack:audio-record
+sudo snap connect slack:run-user
+sudo snap connect slack:removable-media
+sudo snap connect slack:etc-slack-desktop-conf
+
+
+else
+
+echo "$1 must be a snap file"
+fi
+

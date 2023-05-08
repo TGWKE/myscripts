@@ -1,0 +1,123 @@
+#!/bin/bash
+# Clean all traces of Slack from the system
+
+# When help is needed it will always be given at Slack
+function help
+{
+        echo " "
+        echo $0 " - Kills all executing Slack processes and removes Slack from device"
+        echo "    - Needs one argument - snap, ddl, both, all"
+	echo "snap : Removes the Snap package which by default also removes its AppData"
+	echo "ddl  : Uninstalls the DDL and removes the AppData"
+	echo "both : Removes both the Snap and DDL and its AppData"
+	echo "all  : both and also removes the default and repo files"
+	echo "Note:  An account w/ sudo privs is required.  The script will ask you to enter your password"
+        exit 1
+}
+
+# remove DDL and its AppData
+function rmddl
+{
+echo "Removing Slack DDL..." 
+sudo $MGR remove -y $NAME >& /dev/null
+
+echo "Removing DDL AppData directory..." $CONFIG
+if [[ -d $CONFIG ]]; then 
+	echo "if"
+	rm -rf $CONFIG
+fi
+}
+
+# remove Snap; AppData is removed when the snap is removed
+function rmsnap
+{
+echo "Removing Slack Snap..."
+sudo snap remove slack >& /dev/null
+wait
+}
+
+
+
+if [[ $# -eq 0 ]]; then
+help
+fi
+
+TODO=$1
+echo $TODO
+
+CONFIG=$HOME'/.config/Slack'
+DEFAULT='/etc/default/slack'
+IDX=`hostnamectl | grep "Operating System" | cut -d: -f2 | cut -d" " -f2`
+
+case $IDX in 
+   Red)
+       	MGR=yum
+        PACKAGE=rpm
+	REPO=/etc/yum.repos.d/slack.repo
+	NAME=slack
+        ;;
+
+   Ubuntu)
+        MGR=apt-get
+        PACKAGE=deb 
+	REPO='/etc/apt/sources.list.d/slack.list'
+	NAME=slack-desktop
+	;;
+
+   Fedora)
+	MGR=dnf
+        PACKAGE=rpm
+	REPO=/etc/yum.repos.d/slack.repo
+	NAME=slack
+	;;
+
+   *) 
+	echo "unknown distro"
+	;;
+
+esac
+
+echo "Killing Slack processes..." 
+killall slack >& /dev/null
+killall slack >& /dev/null
+
+
+case $TODO in
+   ddl)
+	echo "remove ddl and appdata"
+	rmddl	
+        ;;
+
+   snap)
+	echo "remove snap"
+	rmsnap
+        ;;
+
+   both)
+	echo "remove ddl and snap"
+	rmddl
+	rmsnap
+        ;;
+
+   all)
+	echo remove everything
+	rmddl
+	rmsnap
+
+	echo "Removing repo files..."
+	if [[ -f $REPO ]]; then 
+		sudo rm $REPO
+	fi
+	if [[ -f $DEFAULT ]]; then 
+		sudo rm $DEFAULT
+	fi
+	;;
+
+   *)
+        echo "unknown option $TODO"
+        ;;
+
+esac
+
+echo "done!"
+
