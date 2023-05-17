@@ -1,0 +1,20 @@
+#!/bin/bash
+# Commands to test ADS, init the proxy and run Squid
+
+echo "executing " $0
+echo " "
+
+echo "net ads testjoin should return 'Join is OK'"
+sudo net ads testjoin
+
+echo " "
+echo "kinit should return 'Authenticated to Kerberos v5'"
+kinit -V -k -t /etc/squid/HTTP.keytab HTTP/rhelproxy.proxyenv.com@PROXYENV.COM
+
+echo " "
+echo "squid should return nothing"
+sudo squid -f /etc/squid/squid.conf.kerb
+sudo squid -f /etc/squid/squid.conf.basic
+sudo squid -f /etc/squid/squid.conf.ntlm
+
+echo "done!"

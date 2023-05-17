@@ -1,0 +1,42 @@
+#!/bin/bash
+# Execute slack with the correct command line options for each proxy type
+# This script assumes the RPM is installed 
+
+# When help is needed it will always be given at Slack
+function help
+{
+        echo " "
+        echo $0 
+	echo " - terminates the app"
+	echo " - removes AppData"
+	echo " - gets slack --version to use in filenames"
+	echo " - executes each type of proxy (kerberos, basic, ntlm) and outputs logs"
+	echo " - kerberos does not requires credentials but the others do"
+	echo " - the app should launch to the purple sign in screen"
+	echo " - you may then quit the app"
+	echo " - tars and compresses files "
+        exit 1
+}
+
+if [[ $# -ne 0 ]]; then
+help
+fi
+
+killall slack >& /dev/null; killall slack >& /dev/null
+rm -rf $HOME/.config/Slack
+
+BUILD=`slack --version`
+LOGS="linux-$BUILD.tar.gz"
+
+echo "launching slack for proxy testing on "$BUILD
+
+slack --silent --log-net-log="/home/$USER/Downloads/linux-$BUILD-3128kerb.json" --proxy-server=rhelproxy.proxyenv.com:3128 >& /dev/null
+
+slack --silent --log-net-log="/home/$USER/Downloads/linux-$BUILD-3129basic.json" --proxy-server=rhelproxy.proxyenv.com:3129 >& /dev/null 
+
+slack --silent --log-net-log="/home/$USER/Downloads/linux-$BUILD-3130ntlm.json" --proxy-server=rhelproxy.proxyenv.com:3130 >& /dev/null
+
+cd $HOME/Downloads
+tar -czvf $LOGS linux-$BUILD-*.json
+
+echo "Please upload `pwd`/$LOGS to compliance Jira for release `slack --version`"
